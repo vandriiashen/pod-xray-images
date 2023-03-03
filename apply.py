@@ -115,7 +115,8 @@ def test(test_folder, nn_name, best_epoch, save_comparison=False):
     
     save_folder = Path('./network_state/')
     res_folder = Path('./res/')
-    (res_folder / nn_name).mkdir(exist_ok=True)
+    if save_comparison:
+        (res_folder / nn_name).mkdir(exist_ok=True)
     
     model = mp.MSDSegmentationModel(c_in, len(labels), depth, width, dilations=dilations)
     epoch = model.load(save_folder / nn_name / '{:04d}.torch'.format(best_epoch))
@@ -143,12 +144,15 @@ def test(test_folder, nn_name, best_epoch, save_comparison=False):
     return np.array(res)
 
 def test_model(test_folder, base_name):
-    '''Tests multiple instances of the same model and writes the results file containing model accuracy and properties of the individual test images
+    '''Tests multiple instances of the same model and returns the results file containing model accuracy and properties of the individual test images
     
     :param test_folder: Test dataset folder
     :type test_folder: :class:`pathlib.PosixPath`
     :param base_name: Base name used by all instances of the model
     :type base_name: :class:`str`
+    
+    :return: Array with test results and image properties
+    :rtype: :class:`np.ndarray`
     '''
     save_folder = Path('./network_state/')
     mat_fnames = sorted((test_folder / '../../mat').glob('*.tiff'))
@@ -167,28 +171,32 @@ def test_model(test_folder, base_name):
         res_arr[i,:image_fields] = fo_th, area, bo_th
     
     for i in range(num_networks):
-        nn_name = '{}{}'.format(base_name, i+1)
+        nn_name = networks[i]
         print(nn_name)
-        epochs = sorted((save_folder / nn_name).glob('*.torch'))
+        epochs = sorted(nn_name.glob('*.torch'))
         # epochs[-1] is the last training epoch, not the best one 
         best_epoch = int(epochs[-2].stem)
         print('Best epoch - ', best_epoch)
-        acc = test(test_folder, nn_name, best_epoch)
+        acc = test(test_folder, nn_name.parts[-1], best_epoch)
         res_arr[:,image_fields+1+i] = acc
     
     res_arr[:,3] = res_arr[:,4:].mean(axis=1)
     
-    np.savetxt('res.csv', res_arr, delimiter=',',
-               header='FO_th,Area,BO_th,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(num_networks)]))
+    return res_arr
     
 if __name__ == "__main__":
     test_root = Path('/export/scratch2/vladysla/Data/Simulated/MC/')
     weight_root = Path('./network_state')
+    res_folder = Path('./test_res')
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--name', type=str, required=True, help='Folder with network weights')
     parser.add_argument('--test', type=str, required=True, help='Folder with the test set')
+    parser.add_argument('--out', type=str, required=False, default='res', help='Name for the file with results')
     args = parser.parse_args()
     test_folder = test_root / args.test
     
-    test_model(test_folder, args.name)
+    res_arr = test_model(test_folder, args.name)
+    
+    np.savetxt(res_folder / '{}.csv'.format(args.out), res_arr, delimiter=',',
+               header='FO_th,Area,BO_th,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-4)]))
