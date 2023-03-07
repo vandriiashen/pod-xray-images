@@ -185,7 +185,7 @@ def test_model(test_folder, base_name):
     return res_arr
     
 if __name__ == "__main__":
-    test_root = Path('/export/scratch2/vladysla/Data/Simulated/MC/')
+    test_root = Path('/export/scratch2/vladysla/Data/Simulated/MC')
     weight_root = Path('./network_state')
     res_folder = Path('./test_res')
     

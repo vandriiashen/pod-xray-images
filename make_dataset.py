@@ -29,6 +29,8 @@ def ff_cor_base(im, ff, im_total, ff_total):
     ff *= float(im_total) / float(ff_total)
     # avoid /0
     ff[ff < 1] = 1
+    # with high absorption it is possible that all photons are scattered, and radon projection is 0
+    im[im < 1] = 1
     
     im /= ff
     im = -np.log(im)
@@ -63,7 +65,7 @@ def log_cor(data_folder, ff_cor):
     '''
     paths = sorted((data_folder / 'proj').glob('*.tiff'))
     (data_folder / 'log_mc').mkdir(exist_ok = True)
-    (data_folder / 'log_radon   ').mkdir(exist_ok = True)
+    (data_folder / 'log_radon').mkdir(exist_ok = True)
     fnames = [path.name for path in paths]
     for fname in fnames:
         proj = imageio.imread(data_folder / 'proj' / fname)

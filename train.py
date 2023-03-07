@@ -90,11 +90,12 @@ def train_model(train_folder, base_name, iter_num):
                 
 if __name__ == "__main__":
     root_folder = Path('/export/scratch2/vladysla/Data/Simulated/MC/Server_tmp/')
+    mat_name = 'fe300'
 
-    train_folder = root_folder / 'fe450_train/mc/'
-    nn_name = 'fe450_mc'
-    train_model(train_folder, nn_name, 4)
+    #mc_train_folder = root_folder / '{}_train/mc/'.format(mat_name)
+    #mc_nn_name = '{}_mc'.format(mat_name)
+    #train_model(mc_train_folder, mc_nn_name, 4)
     
-    train_folder = root_folder / 'fe450_train/radon/'
-    nn_name = 'fe450_r'
-    train_model(train_folder, nn_name, 4)
+    r_train_folder = root_folder / '{}_train/radon/'.format(mat_name)
+    r_nn_name = '{}_r'.format(mat_name)
+    train_model(r_train_folder, r_nn_name, 4)
