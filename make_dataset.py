@@ -71,6 +71,11 @@ def log_cor(data_folder, ff_cor):
         proj = imageio.imread(data_folder / 'proj' / fname)
         scat = imageio.imread(data_folder / 'scat' / fname)
         radon = proj - scat
+        
+        # Add noise
+        #proj = add_noise(proj, 0.20)
+        #radon = add_noise(radon, 0.20)
+        
         log_mc = ff_cor(proj)
         log_radon = ff_cor(radon)
         imageio.imwrite(data_folder / 'log_mc' / fname, log_mc.astype(np.float32))
@@ -148,7 +153,7 @@ def create_test_datasets(data_folder):
         shutil.copy(data_folder / 'segm' / fnames[i], data_folder / 'radon' / 'test' / 'tg' / fnames[i])
 
 if __name__ == "__main__":
-    data_root = Path('/export/scratch2/vladysla/Data/Simulated/MC/')
+    data_root = Path('/export/scratch2/vladysla/Data/Simulated/MC/Server_tmp')
     ff_fname = '/export/scratch2/vladysla/Data/Simulated/MC/Server_tmp/scan_ff/proj/0000.tiff'
     im_total = 10**9
     ff_total = 10**10

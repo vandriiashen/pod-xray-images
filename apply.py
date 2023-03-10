@@ -33,6 +33,7 @@ def compute_f1(pred, tg):
 
 def extract_fo_properties(mat):
     '''Computes different image properties of the defect based on the distribution of material thickness
+    UPDATE!
     
     :param mat: 2D material thickness distribution (line integrals of segmentation). Consists of 2 channels: cylinder material and void (defect)
     :type mat: :class:`list`
@@ -49,11 +50,13 @@ def extract_fo_properties(mat):
         min_th = mat[0,fo_map > 0].min()
         fo_th = fo_map.max()
         bo_th = mat[0,:].ravel()[np.argmax(fo_map)]
+        bo_fract = bo_th / mat[0,:].max()
     else:
         bo_th = 0
         fo_th = 0
+        bo_fract = 0
     
-    return fo_th, area, bo_th
+    return fo_th, area, bo_th, bo_fract
 
 def make_comparison(inp, tg, pred, fname):
     '''Visualizes the network prediction and compares it with ground-truth
@@ -157,18 +160,18 @@ def test_model(test_folder, base_name):
     save_folder = Path('./network_state/')
     mat_fnames = sorted((test_folder / '../../mat').glob('*.tiff'))
     
-    networks = [x for x in weight_root.iterdir() if x.is_dir()]
-    networks = sorted(filter(lambda x: x.name.startswith(args.name), networks))
+    networks = [x for x in save_folder.iterdir() if x.is_dir()]
+    networks = sorted(filter(lambda x: x.name.startswith(base_name), networks))
     num_networks = len(networks)
     
     # First 3 fields are image properties
-    image_fields = 3
+    image_fields = 4
     res_arr = np.zeros((len(mat_fnames), image_fields+num_networks+1))
     
     for i in range(len(mat_fnames)):
         mat = imageio.mimread(mat_fnames[i])
-        fo_th, area, bo_th = extract_fo_properties(mat)
-        res_arr[i,:image_fields] = fo_th, area, bo_th
+        fo_th, area, bo_th, bo_fract = extract_fo_properties(mat)
+        res_arr[i,:image_fields] = fo_th, area, bo_th, bo_fract
     
     for i in range(num_networks):
         nn_name = networks[i]
@@ -180,23 +183,39 @@ def test_model(test_folder, base_name):
         acc = test(test_folder, nn_name.parts[-1], best_epoch)
         res_arr[:,image_fields+1+i] = acc
     
-    res_arr[:,3] = res_arr[:,4:].mean(axis=1)
+    res_arr[:,image_fields] = res_arr[:,image_fields+1:].mean(axis=1)
     
     return res_arr
+
+def batch_mode(test_root, res_folder, mat_name = 'pl90'):
+    res_arr = test_model(test_root / '{}_test/radon/test'.format(mat_name), '{}_r'.format(mat_name))
+    np.savetxt(res_folder / '{}_r_r.csv'.format(mat_name), res_arr, delimiter=',',
+                header='FO_th,Area,BO_th,BO_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+    res_arr = test_model(test_root / '{}_test/mc/test'.format(mat_name), '{}_r'.format(mat_name))
+    np.savetxt(res_folder / '{}_r_mc.csv'.format(mat_name), res_arr, delimiter=',',
+                header='FO_th,Area,BO_th,BO_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+    res_arr = test_model(test_root / '{}_test/radon/test'.format(mat_name), '{}_mc'.format(mat_name))
+    np.savetxt(res_folder / '{}_mc_r.csv'.format(mat_name), res_arr, delimiter=',',
+                header='FO_th,Area,BO_th,BO_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+    res_arr = test_model(test_root / '{}_test/mc/test'.format(mat_name), '{}_mc'.format(mat_name))
+    np.savetxt(res_folder / '{}_mc_mc.csv'.format(mat_name), res_arr, delimiter=',',
+                header='FO_th,Area,BO_th,BO_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
     
 if __name__ == "__main__":
-    test_root = Path('/export/scratch2/vladysla/Data/Simulated/MC')
-    weight_root = Path('./network_state')
+    test_root = Path('/export/scratch2/vladysla/Data/Simulated/MC/Server_tmp')
     res_folder = Path('./test_res')
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', type=str, required=True, help='Folder with network weights')
-    parser.add_argument('--test', type=str, required=True, help='Folder with the test set')
+    parser.add_argument('--batch', type=str, help='Batch mode: execute the function instead')
+    parser.add_argument('--name', type=str, required=False, help='Folder with network weights')
+    parser.add_argument('--test', type=str, required=False, help='Folder with the test set')
     parser.add_argument('--out', type=str, required=False, default='res', help='Name for the file with results')
     args = parser.parse_args()
-    test_folder = test_root / args.test
     
-    res_arr = test_model(test_folder, args.name)
-    
-    np.savetxt(res_folder / '{}.csv'.format(args.out), res_arr, delimiter=',',
-               header='FO_th,Area,BO_th,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-4)]))
+    if args.batch:
+        batch_mode(test_root, res_folder, args.batch)
+    else:
+        test_folder = test_root / args.test
+        res_arr = test_model(test_folder, args.name)
+        np.savetxt(res_folder / '{}.csv'.format(args.out), res_arr, delimiter=',',
+                header='FO_th,Area,BO_th,BO_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))

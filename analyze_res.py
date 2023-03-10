@@ -3,7 +3,35 @@ from pathlib import Path
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from matplotlib import ticker, colors
+
+def compute_s90(fit, x_range=np.linspace(0., 3., 1000)):
+    '''Computes s_90 - defect size for 90\% probability of good segmentation and s_90/95 - lower bound of the same value for 95% confidence interval.
+    It is possiblee that one value or both do not exist. The function will return in this case.
     
+    :param fit: Statsmodels object with fit results
+    :type fit: :class:`statsmodels.genmod.generalized_linear_model.GLMResultsWrapper`
+    :param x_range: Range of defect size to compute probabilities
+    :type x_range: :class:`np.ndarray`
+
+    :return: List containing s_90 and s_90/95. If any does not exist, it is replaced with -1.
+    :rtype: :class:`list`
+    '''
+    nu = fit.params[0]*x_range + fit.params[1]
+    nu_low = (fit.params[0]-2*fit.bse[0])*x_range + (fit.params[1]-2*fit.bse[1])
+    p = 1 / (1+np.exp(-nu))
+    p_low = 1 / (1+np.exp(-nu_low))
+    
+    res = [-1., -1.]
+    s90_95_exists = np.any(p_low > 0.9)
+    s90_exists = np.any(p > 0.9)
+    if s90_exists:
+        s90 = x_range[np.where(p > 0.9)].min()
+        res[0] = s90
+    if s90_95_exists:
+        s90_95 = x_range[np.where(p_low > 0.9)].min()
+        res[1] = s90_95
+    return res
+
 def stat_analyze(res):
     '''Performs binomial fit on the model results to determine POD properties.
     Segmentation accuracy is transformed into a binary outcome. A segmentation is considered good if F1 score is higher than 50%.
@@ -58,31 +86,18 @@ def draw_pod(ax, fit, res=None, default_x_range=np.linspace(0., 3., 1000), draw_
     p_low = 1 / (1+np.exp(-nu_low))
     p_high = 1 / (1+np.exp(-nu_high))
     
-    if draw_s90:
-        s90_95_exists = np.any(p_low > 0.9)
-        s90_exists = np.any(p > 0.9)
-        if s90_exists:
-            s90 = x_range[np.where(p > 0.9)].min()
-            print('s90 = {}'.format(s90))
-        else:
-            print('s90 does not exist')
-        if s90_95_exists:
-            s90_95 = x_range[np.where(p_low > 0.9)].min()
-            print('s90/95% = {}'.format(s90_95))
-        else:
-            print('s90/95% does not exist')
-    else:
-        s90_exists = False
-        s90_95_exists = False
+    s90, s90_95 = compute_s90(fit, x_range=x_range)
+    s90_exists = True if s90 > -1 else False
+    s90_95_exists = True if s90_95 > -1 else False
     
     if draw_confidence_interval:
         ax.fill_between(x_range, p_low, p_high, color=colors[1], alpha = 0.2, label = '{} 95% confidence'.format(label))
     ax.plot(x_range, p, c=colors[0], label = label)
-    if s90_95_exists:
+    if draw_s90 and s90_95_exists:
         ax.vlines([s90, s90_95], 0., 0.9, linestyles='--', color='k')
         ax.scatter([s90, s90_95], [0.9, 0.9], color='k', s=20)
         plt.scatter(s90_95, 0.9, color='g', s=30, label = label + ' ' + r"$s_{90/95\%}$")
-    if s90_exists:
+    if draw_s90 and s90_exists:
         ax.vlines([s90], 0., 0.9, linestyles='--', color='k')
         ax.scatter([s90], [0.9], color='k', s=20)
         plt.scatter(s90, 0.9, color='k', s=30, label = label + ' ' + r"$s_{90}$")
@@ -194,11 +209,12 @@ def comp_models(fits, fit_labels, draw_s90 = False, x_range = np.linspace(0., 3.
     
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
     for i in range(len(fits)):
-        draw_pod(ax, fits[i], draw_confidence_interval=False, draw_s90=draw_s90, 
+        draw_pod(ax, fits[i], draw_confidence_interval=True, draw_s90=draw_s90, 
                  label=fit_labels[i], colors = [colors[i], colors[i]], default_x_range=x_range)
 
     plt.tight_layout()
     plt.savefig('tmp_img/comp_models.pdf', format='pdf')
+    plt.savefig('tmp_img/comp_models.png')
     plt.show()
     
 def comp_mat(fits1, fits2, fit_labels, test_labels, x_range = np.linspace(0., 3., 1000)):
@@ -230,6 +246,7 @@ def comp_mat(fits1, fits2, fit_labels, test_labels, x_range = np.linspace(0., 3.
 
     plt.tight_layout()
     plt.savefig('tmp_img/comp_mat.pdf', format='pdf')
+    #plt.savefig('tmp_img/comp_mat.png')
     plt.show()
     
 def compare_bo_fo(res1, res2):
@@ -264,6 +281,7 @@ def compare_bo_fo(res1, res2):
     
     plt.tight_layout()
     plt.savefig('tmp_img/comp_bo_fo.pdf', format='pdf')
+    plt.savefig('tmp_img/comp_bo_fo.png')
     plt.show()
     
 def load_res_file(fname):
@@ -276,8 +294,11 @@ def load_res_file(fname):
     :rtype: :class:`np.ndarray`
     '''
     res = np.genfromtxt(fname, delimiter=',', names=True)
-    #nonzero_FO_mask = res['FO_th'] != 0
-    #res = res[nonzero_FO_mask]
+    raw_total = res.shape[0]
+    mask = res['BO_fract'] > 0.9
+    res = res[mask]
+    filtered_total = res.shape[0]
+    print("After filter: {}/{}".format(filtered_total, raw_total))
     return res
 
 def single_test(model_name):
@@ -286,17 +307,19 @@ def single_test(model_name):
     show_pod_pipeline(res, fit)
 
 def batch_test(mat_name = 'pl90', draw_s90=False):
-    res_r_r = load_res_file('./test_res/{}_r_r.csv'.format(mat_name))
-    res_r_mc = load_res_file('./test_res/{}_r_mc.csv'.format(mat_name))
-    res_mc_r = load_res_file('./test_res/{}_mc_r.csv'.format(mat_name))
-    res_mc_mc = load_res_file('./test_res/{}_mc_mc.csv'.format(mat_name))
+    names = ['R/R', 'R/MC', 'MC/R', 'MC/MC']
+    res_list = []
+    res_list.append(load_res_file('./test_res/{}_r_r.csv'.format(mat_name)))
+    res_list.append(load_res_file('./test_res/{}_r_mc.csv'.format(mat_name)))
+    res_list.append(load_res_file('./test_res/{}_mc_r.csv'.format(mat_name)))
+    res_list.append(load_res_file('./test_res/{}_mc_mc.csv'.format(mat_name)))
     
-    fit_r_r = stat_analyze(res_r_r)
-    fit_r_mc = stat_analyze(res_r_mc)
-    fit_mc_r = stat_analyze(res_mc_r)
-    fit_mc_mc = stat_analyze(res_mc_mc)
+    fits = [stat_analyze(res) for res in res_list]
+    for i, name in enumerate(names):
+        s90, s90_95 = compute_s90(fits[i])
+        print('{}:\t s_90 = {:.3f} | s_90/95 = {:.3f}'.format(name, s90, s90_95))
     
-    comp_models([fit_r_r, fit_r_mc, fit_mc_r, fit_mc_mc], ['R/R', 'R/MC', 'MC/R', 'MC/MC'], draw_s90=draw_s90)
+    comp_models(fits, names, draw_s90=draw_s90)
 
 def mat_comparison(mat1 = 'pl90', mat2 = 'fe450'):
     res1_r_mc = load_res_file('./test_res/{}_r_mc.csv'.format(mat1))
@@ -318,7 +341,8 @@ def heatmap_comparison(mat_name = 'pl90'):
     compare_bo_fo(res_r_mc, res_mc_mc)
 
 if __name__ == "__main__":
-    #materials are pl90, fe450
-    batch_test('biron', draw_s90=False)
-    #single_test('fe450biron_mc_mc')
-    #heatmap_comparison('fe450biron')
+    #materials are pl90, fe450 (+biron, +fe450biron), fe300
+    batch_test('fe300', draw_s90=False)
+    #single_test('fe450biron')
+    #mat_comparison('biron', 'fe450')
+    #heatmap_comparison('fe450')
