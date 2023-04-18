@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 import msd_pytorch as mp
 from pathlib import Path
+from scipy import ndimage
 import argparse
 #Result visualization
 import matplotlib.pyplot as plt
@@ -68,12 +69,35 @@ def extract_im_properties(fo, log, proj, scat):
     :return: List of properties of the defect region: average attenuation and scattering to primary ratio
     :rtype: :class:`tuple`
     '''
-    mean_att = log[fo].mean()
-    total_primary = proj[fo].sum()
-    total_scattered = proj[fo].sum()
-    scat_fract = total_scattered / total_primary
+    if np.count_nonzero(fo) > 0.:
+        mean_att = log[fo].mean()
+        
+        #scat = ndimage.gaussian_filter(scat, sigma=5)
+        #print('Area: ', np.count_nonzero(fo))
+        #print('Att: ', mean_att)
+        
+        prim = proj - scat        
+        bg = morphology.binary_dilation(morphology.binary_dilation(fo)).astype(np.uint8) - fo.astype(np.uint8)
+        ext_fo = morphology.binary_dilation(morphology.binary_dilation(fo))
+                
+        prim_bg = prim[bg == 1]
+        prim_fo = prim[fo]
+        scat_fo = scat[fo]
+        div = scat[ext_fo] / prim[ext_fo]
+        
+        #print('Prim: {:.2f} +- {:.2f}'.format(prim_fo.mean(), prim_fo.std()))
+        #print('Prim bg: {:.2f} +- {:.2f}'.format(prim_bg.mean(), prim_bg.std()))
+        #print('Scat = {:.2f} +- {:.2f}'.format(scat_fo.mean(), scat_fo.std()))
+        #print('Div = {:.2f} +- {:.2f}'.format(div.mean(), div.std()))
+                
+        scat_fract = div.mean()
+        scat_std = div.std()
+    else:
+        mean_att = 0.
+        scat_fract = 0.
+        scat_std = 0.
     
-    return mean_att, scat_fract
+    return mean_att, scat_fract, scat_std
 
 def make_comparison(inp, tg, pred, fname):
     '''Visualizes the network prediction and compares it with ground-truth
@@ -178,15 +202,25 @@ def test_model(test_folder, base_name):
     inp_fnames = sorted((test_folder / 'inp').glob('*.tiff'))
     stats_file = np.genfromtxt(test_folder / '../../stats.csv', delimiter=',', names=True)
     
+    print(test_folder.parts[-2])
+    
+    if test_folder.parts[-2] == 'radon':
+        print(base_name, ' Radon')
+        log_folder = 'log_radon'
+    elif test_folder.parts[-2] == 'mc':
+        print(base_name, ' MC')
+        log_folder = 'log_mc'
+    else:
+        print('Unknown model type, default to Radon')
+        log_folder = 'log_radon'
+    
     networks = [x for x in save_folder.iterdir() if x.is_dir()]
-    print(networks)
-    print(base_name)
     networks = sorted(filter(lambda x: x.name.startswith(base_name), networks))
     print(networks)
     num_networks = len(networks)
     
     # First 3 fields are image properties
-    image_fields = 4
+    image_fields = 8
     res_arr = np.zeros((len(inp_fnames), image_fields+num_networks+1))
     
     for i in range(len(inp_fnames)):
@@ -194,12 +228,12 @@ def test_model(test_folder, base_name):
         cyl_r = stats_file['cyl_r'][im_num]
         cav_r = stats_file['cav_r'][im_num]
         mat = imageio.mimread(test_folder / '../../mat' / inp_fnames[i].name)
-        log = imageio.imread(inp_fnames[i])
+        log = imageio.imread(test_folder / '../..' / log_folder / inp_fnames[i].name)
         proj = imageio.imread(test_folder / '../../proj' / inp_fnames[i].name)
         scat = imageio.imread(test_folder / '../../scat' / inp_fnames[i].name)
         fo_mask, fo_th, area = extract_fo_properties(mat)
-        fo_att, scat_fract = extract_im_properties(fo_mask, log, proj, scat)
-        res_arr[i,:image_fields] = fo_th, area, fo_att, scat_fract
+        fo_att, scat_fract, scat_std = extract_im_properties(fo_mask, log, proj, scat)
+        res_arr[i,:image_fields] = i, fo_th, area, cyl_r, cav_r/cyl_r, fo_att, scat_fract, scat_std
     
     for i in range(num_networks):
         nn_name = networks[i]
@@ -218,16 +252,16 @@ def test_model(test_folder, base_name):
 def batch_mode(test_root, res_folder, mat_name = 'pl90'):
     res_arr = test_model(test_root / '{}_test/radon/test'.format(mat_name), '{}_r'.format(mat_name))
     np.savetxt(res_folder / '{}_r_r.csv'.format(mat_name), res_arr, delimiter=',',
-                header='FO_th,Area,FO_att,Scat_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+                header='ID,FO_th,Area,Cyl_R,Cav_Pos,FO_att,Scat_fract,Scat_std,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-9)]))
     res_arr = test_model(test_root / '{}_test/mc/test'.format(mat_name), '{}_r'.format(mat_name))
     np.savetxt(res_folder / '{}_r_mc.csv'.format(mat_name), res_arr, delimiter=',',
-                header='FO_th,Area,FO_att,Scat_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+                header='ID,FO_th,Area,Cyl_R,Cav_Pos,FO_att,Scat_fract,Scat_std,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-9)]))
     res_arr = test_model(test_root / '{}_test/radon/test'.format(mat_name), '{}_mc'.format(mat_name))
     np.savetxt(res_folder / '{}_mc_r.csv'.format(mat_name), res_arr, delimiter=',',
-                header='FO_th,Area,FO_att,Scat_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+                header='ID,FO_th,Area,Cyl_R,Cav_Pos,FO_att,Scat_fract,Scat_std,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-9)]))
     res_arr = test_model(test_root / '{}_test/mc/test'.format(mat_name), '{}_mc'.format(mat_name))
     np.savetxt(res_folder / '{}_mc_mc.csv'.format(mat_name), res_arr, delimiter=',',
-                header='FO_th,Area,FO_att,Scat_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+                header='ID,FO_th,Area,Cyl_R,Cav_Pos,FO_att,Scat_fract,Scat_std,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-9)]))
     
 if __name__ == "__main__":
     test_root = Path('/export/scratch2/vladysla/Data/Simulated/MC/Server_tmp')
@@ -246,4 +280,4 @@ if __name__ == "__main__":
         test_folder = test_root / args.test
         res_arr = test_model(test_folder, args.name)
         np.savetxt(res_folder / '{}.csv'.format(args.out), res_arr, delimiter=',',
-                header='FO_th,Area,FO_att,Scat_fract,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-5)]))
+                header='ID,FO_th,Area,Cyl_R,Cav_Pos,FO_att,Scat_fract,Scat_std,Mean,' + ','.join(['Iter{}'.format(i+1) for i in range(res_arr.shape[1]-9)]))

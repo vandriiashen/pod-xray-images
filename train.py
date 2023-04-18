@@ -84,28 +84,19 @@ def train_model(train_folder, base_name, iter_num):
     :type iter_num: :class:`int`
     
     '''
-    for i in range(0, 0+iter_num):
+    for i in range(5, 5+iter_num):
         nn_name = '{}_{}'.format(base_name, i+1)
         train(train_folder, nn_name)
                 
 if __name__ == "__main__":
     root_folder = Path('/export/scratch2/vladysla/Data/Simulated/MC/Server_tmp')
-    mat_name = 'al90'
+    
+    mat_name = 'pl40'
 
-    mc_train_folder = root_folder / '{}_train/mc/'.format(mat_name)
-    mc_nn_name = '{}_mc'.format(mat_name)
-    train_model(mc_train_folder, mc_nn_name, 10)
+    #mc_train_folder = root_folder / '{}_train/mc/'.format(mat_name)
+    #mc_nn_name = '{}_mc'.format(mat_name)
+    #train_model(mc_train_folder, mc_nn_name, 10)
     
     r_train_folder = root_folder / '{}_train/radon/'.format(mat_name)
     r_nn_name = '{}_r'.format(mat_name)
-    train_model(r_train_folder, r_nn_name, 10)
-    
-    mat_name = 'al300'
-
-    mc_train_folder = root_folder / '{}_train/mc/'.format(mat_name)
-    mc_nn_name = '{}_mc'.format(mat_name)
-    train_model(mc_train_folder, mc_nn_name, 10)
-    
-    r_train_folder = root_folder / '{}_train/radon/'.format(mat_name)
-    r_nn_name = '{}_r'.format(mat_name)
-    train_model(r_train_folder, r_nn_name, 10)
+    train_model(r_train_folder, r_nn_name, 5)
