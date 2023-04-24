@@ -420,8 +420,8 @@ def compare_networks(model_name):
     print('s90_95%  = {:.2f} +- {:.3f}'.format(s9095s_arr.mean(), s9095s_arr.std()))
     
     res_mc_mc = load_res_file('./test_res/{}_mc_mc.csv'.format(model_name))
-    fit_r_mc = stat_analyze(res_r_mc, 'DeepLabV3Plus_efficientnet_b0')
-    fit_mc_mc = stat_analyze(res_mc_mc, 'DeepLabV3Plus_efficientnet_b0')
+    fit_r_mc = stat_analyze(res_r_mc, 'DeepLabV3Plus_efficientnet_b4')
+    fit_mc_mc = stat_analyze(res_mc_mc, 'DeepLabV3Plus_efficientnet_b4')
     colors = ['#1f77b4', '#ff7f0e']
     draw_pod(ax[1], fit_mc_mc, draw_confidence_interval=True, draw_s90=False, label='Train MC', colors = ['#ff7f0e', '#ff7f0e'], default_x_range=np.linspace(0., 3., 1000))
     draw_pod(ax[1], fit_r_mc, draw_confidence_interval=False, draw_s90=False, label='Train Radon', colors = ['#1f77b4', '#1f77b4'], default_x_range=np.linspace(0., 3., 1000))

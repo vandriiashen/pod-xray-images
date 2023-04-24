@@ -6,6 +6,19 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker, colors, cm
 
 def multivariate_stat_analyze(res, y_val='Mean', second_variable='Scat_fract'):
+    '''Multivariate POD fit
+    Segmentation accuracy is transformed into a binary outcome. A segmentation is considered good if F1 score is higher than 50%.
+    
+    :param res: Array with model results
+    :type res: :class:`np.ndarray`
+    :param y_val: Field of the results to use as model F1. By default, use mean value, but individual instances can also be used
+    :type y_val: :class:`str`
+    :param second_variable: Second independent variable that will be used with defect size
+    :type second_variable: :class:`str`
+    
+    :return: Statsmodels object with fit results
+    :rtype: :class:`statsmodels.genmod.generalized_linear_model.GLMResultsWrapper`
+    '''    
     y = res[y_val] > 0.5
     x = np.ones((res['FO_th'].shape[0], 3))
     x[:,0] = res['FO_th']
@@ -17,6 +30,28 @@ def multivariate_stat_analyze(res, y_val='Mean', second_variable='Scat_fract'):
 
 def draw_multivariate_pod(ax, fit, res=None, snr_level=0., default_x_range=np.linspace(0., 3., 1000), 
              draw_confidence_interval=False, label='POD', colors = ['r', 'b'], linestyle='-'):
+    '''Draws POD curve on ax based on fit parameters. It is assumed that the fit uses defect size and SNR as independent variables.
+    
+    :param ax: Subplot axes to draw on
+    :type ax: :class:`matplotlib.axes._subplots.AxesSubplot`
+    :param fit: multivariate fit results object
+    :type fit: :class:`statsmodels.genmod.generalized_linear_model.GLMResultsWrapper`
+    :param res: Array with model results. Only used to get range of FO size. If None, default_x_range will be used instead
+    :type res: :class:`np.ndarray`
+    :param snr_level: SNR will be equal to this value to draw POD as a function of defect size only 
+    :type snr_level: :class:`float`
+    :param default_x_range: Default range of defect size to use if res array is not provided
+    :type default_x_range: :class:`np.ndarray`
+    :param draw_confidence_interval: Set to True to draw confidence interval
+    :type draw_confidence_interval: :class:`bool`
+    :param label: Label to use in legend
+    :type label: :class:`str`
+    :param colors: Colors to use for the curve and confidence interval
+    :type colors: :class:`list`
+    :param linestyle: Linestyle for POD curve
+    :type linestyle: :class:`str`
+    
+    '''    
     x_range = default_x_range
     if res is not None:
         x = res['FO_th']
